@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using PromoCodeFactory.WebHost.Mapping;
 using PromoCodeFactory.WebHost.Models;
+using PromoCodeFactory.Core.Domain.Administration;
+using PromoCodeFactory.Core.Exceptions;
+using PromoCodeFactory.Core.Abstractions.Repositories;
 
 namespace PromoCodeFactory.WebHost.Controllers;
 
@@ -34,7 +37,14 @@ public class EmployeesController(
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<EmployeeResponse>> GetById([FromRoute] Guid id, CancellationToken ct)
     {
-        throw new NotImplementedException();
+        var employee = await employeeRepository.GetById(id, ct);
+
+        if (employee is null)
+            return NotFound();
+
+        var response = Mapper.ToEmployeeResponse(employee);
+
+        return Ok(response);
     }
 
     /// <summary>
@@ -45,7 +55,21 @@ public class EmployeesController(
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<EmployeeResponse>> Create([FromBody] EmployeeCreateRequest request, CancellationToken ct)
     {
-        throw new NotImplementedException();
+        var role = await roleRepository.GetById(request.RoleId, ct);
+
+        if (role is null)
+            return BadRequest("Role not found.");
+
+        var employee = Mapper.ToEmployee(request, role);
+
+        await employeeRepository.Add(employee, ct);
+
+        var response = Mapper.ToEmployeeResponse(employee);
+
+        return CreatedAtAction(
+            nameof(GetById),
+            new { id = employee.Id },
+            response);
     }
 
     /// <summary>
@@ -60,7 +84,26 @@ public class EmployeesController(
         [FromBody] EmployeeUpdateRequest request,
         CancellationToken ct)
     {
-        throw new NotImplementedException();
+        var employee = await employeeRepository.GetById(id, ct);
+
+        if (employee is null)
+            return NotFound();
+
+        var role = await roleRepository.GetById(request.RoleId, ct);
+
+        if (role is null)
+            return BadRequest("Role not found.");
+
+        employee.FirstName = request.FirstName;
+        employee.LastName = request.LastName;
+        employee.Email = request.Email;
+        employee.Role = role;
+
+        await employeeRepository.Update(employee, ct);
+
+        var response = Mapper.ToEmployeeResponse(employee);
+
+        return Ok(response);
     }
 
     /// <summary>
@@ -73,6 +116,14 @@ public class EmployeesController(
         [FromRoute] Guid id,
         CancellationToken ct)
     {
-        throw new NotImplementedException();
+        try
+        {
+            await employeeRepository.Delete(id, ct);
+            return NoContent();
+        }
+        catch (EntityNotFoundException<Employee>)
+        {
+            return NotFound();
+        }
     }
 }
